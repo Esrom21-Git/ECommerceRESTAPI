@@ -1,3 +1,6 @@
+![Alt text](https://example.com/image.png)
+![image](https://github.com/user-attachments/assets/1fdf547d-8d3b-41d4-be33-cdf0fc900879)
+
 # 🛒 E-Commerce REST API
 
 A comprehensive Spring Boot REST API for e-commerce applications with full CRUD operations, user authentication, and shopping cart functionality.
