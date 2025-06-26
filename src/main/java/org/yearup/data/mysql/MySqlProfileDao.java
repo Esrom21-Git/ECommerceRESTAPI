@@ -44,4 +44,106 @@ public class MySqlProfileDao extends MySqlDaoBase implements ProfileDao
         }
     }
 
+    @Override
+    public Profile getByUserId(int userId)
+    {
+        String sql = "SELECT user_id, first_name, last_name, phone, email, address, city, state, zip " +
+                "FROM profiles WHERE user_id = ?";
+
+        try (Connection connection = getConnection();
+             PreparedStatement ps = connection.prepareStatement(sql))
+        {
+            ps.setInt(1, userId);
+
+            try (ResultSet rs = ps.executeQuery())
+            {
+                if (rs.next())
+                {
+                    return mapRow(rs);
+                }
+            }
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException(e);
+        }
+
+        return null;
+    }
+
+    @Override
+    public Profile update(int userId, Profile profile)
+    {
+        String sql = "UPDATE profiles SET first_name = ?, last_name = ?, phone = ?, email = ?, " +
+                "address = ?, city = ?, state = ?, zip = ? WHERE user_id = ?";
+
+        try (Connection connection = getConnection();
+             PreparedStatement ps = connection.prepareStatement(sql))
+        {
+            ps.setString(1, profile.getFirstName());
+            ps.setString(2, profile.getLastName());
+            ps.setString(3, profile.getPhone());
+            ps.setString(4, profile.getEmail());
+            ps.setString(5, profile.getAddress());
+            ps.setString(6, profile.getCity());
+            ps.setString(7, profile.getState());
+            ps.setString(8, profile.getZip());
+            ps.setInt(9, userId);
+
+            int rowsAffected = ps.executeUpdate();
+
+            if (rowsAffected == 0)
+            {
+                throw new RuntimeException("Profile not found for user ID: " + userId);
+            }
+
+            // Return the updated profile
+            profile.setUserId(userId);
+            return profile;
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public void delete(int userId)
+    {
+        String sql = "DELETE FROM profiles WHERE user_id = ?";
+
+        try (Connection connection = getConnection();
+             PreparedStatement ps = connection.prepareStatement(sql))
+        {
+            ps.setInt(1, userId);
+
+            int rowsAffected = ps.executeUpdate();
+
+            if (rowsAffected == 0)
+            {
+                throw new RuntimeException("Profile not found for user ID: " + userId);
+            }
+        }
+        catch (SQLException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    // Helper method to map ResultSet to Profile object
+    private Profile mapRow(ResultSet rs) throws SQLException
+    {
+        Profile profile = new Profile();
+        profile.setUserId(rs.getInt("user_id"));
+        profile.setFirstName(rs.getString("first_name"));
+        profile.setLastName(rs.getString("last_name"));
+        profile.setPhone(rs.getString("phone"));
+        profile.setEmail(rs.getString("email"));
+        profile.setAddress(rs.getString("address"));
+        profile.setCity(rs.getString("city"));
+        profile.setState(rs.getString("state"));
+        profile.setZip(rs.getString("zip"));
+
+        return profile;
+    }
 }
