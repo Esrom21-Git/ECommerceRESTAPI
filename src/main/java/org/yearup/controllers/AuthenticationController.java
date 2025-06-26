@@ -1,6 +1,7 @@
 package org.yearup.controllers;
 
 import javax.validation.Valid;
+import java.security.Principal;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -25,7 +26,7 @@ import org.yearup.security.jwt.TokenProvider;
 
 @RestController
 @CrossOrigin
-@PreAuthorize("permitAll()")
+@RequestMapping("/auth")
 public class AuthenticationController {
 
     private final TokenProvider tokenProvider;
@@ -40,59 +41,177 @@ public class AuthenticationController {
         this.profileDao = profileDao;
     }
 
-    @RequestMapping(value = "/login", method = RequestMethod.POST)
+    @PostMapping("/login")
     public ResponseEntity<LoginResponseDto> login(@Valid @RequestBody LoginDto loginDto) {
+        try {
+            UsernamePasswordAuthenticationToken authenticationToken =
+                    new UsernamePasswordAuthenticationToken(loginDto.getUsername(), loginDto.getPassword());
 
-        UsernamePasswordAuthenticationToken authenticationToken =
-                new UsernamePasswordAuthenticationToken(loginDto.getUsername(), loginDto.getPassword());
+            Authentication authentication = authenticationManagerBuilder.getObject().authenticate(authenticationToken);
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            String jwt = tokenProvider.createToken(authentication, false);
 
-        Authentication authentication = authenticationManagerBuilder.getObject().authenticate(authenticationToken);
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-        String jwt = tokenProvider.createToken(authentication, false);
-
-        try
-        {
             User user = userDao.getByUserName(loginDto.getUsername());
 
-            if (user == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+            if (user == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
+            }
 
             HttpHeaders httpHeaders = new HttpHeaders();
             httpHeaders.add(JWTFilter.AUTHORIZATION_HEADER, "Bearer " + jwt);
             return new ResponseEntity<>(new LoginResponseDto(jwt, user), httpHeaders, HttpStatus.OK);
         }
-        catch(Exception ex)
-        {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Oops... our bad.");
+        catch (Exception ex) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication failed");
         }
     }
 
+    @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    @RequestMapping(value = "/register", method = RequestMethod.POST)
     public ResponseEntity<User> register(@Valid @RequestBody RegisterUserDto newUser) {
-
-        try
-        {
-            boolean exists = userDao.exists(newUser.getUsername());
-            if (exists)
-            {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User Already Exists.");
+        try {
+            // Check if username already exists
+            if (userDao.exists(newUser.getUsername())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists");
             }
 
-            // create user
+            // Create user
             User user = userDao.create(new User(0, newUser.getUsername(), newUser.getPassword(), newUser.getRole()));
 
-            // create profile
+            // Create empty profile for the user
             Profile profile = new Profile();
             profile.setUserId(user.getId());
             profileDao.create(profile);
 
             return new ResponseEntity<>(user, HttpStatus.CREATED);
         }
-        catch (Exception e)
-        {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Oops... our bad.");
+        catch (ResponseStatusException e) {
+            throw e; // Re-throw our custom exceptions
+        }
+        catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Registration failed");
         }
     }
 
+    @GetMapping("/profile")
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+    public ResponseEntity<Profile> getCurrentUserProfile(Principal principal) {
+        try {
+            String username = principal.getName();
+            User user = userDao.getByUserName(username);
+
+            if (user == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
+            }
+
+            Profile profile = profileDao.getByUserId(user.getId());
+
+            if (profile == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found");
+            }
+
+            return ResponseEntity.ok(profile);
+        }
+        catch (ResponseStatusException e) {
+            throw e;
+        }
+        catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to retrieve profile");
+        }
+    }
+
+    @PutMapping("/profile")
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+    public ResponseEntity<Profile> updateCurrentUserProfile(@Valid @RequestBody Profile profile, Principal principal) {
+        try {
+            String username = principal.getName();
+            User user = userDao.getByUserName(username);
+
+            if (user == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
+            }
+
+            // Ensure the profile belongs to the current user
+            profile.setUserId(user.getId());
+            Profile updatedProfile = profileDao.update(user.getId(), profile);
+
+            return ResponseEntity.ok(updatedProfile);
+        }
+        catch (ResponseStatusException e) {
+            throw e;
+        }
+        catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to update profile");
+        }
+    }
+
+    @GetMapping("/user")
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+    public ResponseEntity<User> getCurrentUser(Principal principal) {
+        try {
+            String username = principal.getName();
+            User user = userDao.getByUserName(username);
+
+            if (user == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
+            }
+
+            return ResponseEntity.ok(user);
+        }
+        catch (ResponseStatusException e) {
+            throw e;
+        }
+        catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to retrieve user");
+        }
+    }
+
+    @PostMapping("/refresh")
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+    public ResponseEntity<LoginResponseDto> refreshToken(Principal principal) {
+        try {
+            String username = principal.getName();
+            User user = userDao.getByUserName(username);
+
+            if (user == null) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found");
+            }
+
+            // Create new authentication token
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String jwt = tokenProvider.createToken(authentication, false);
+
+            HttpHeaders httpHeaders = new HttpHeaders();
+            httpHeaders.add(JWTFilter.AUTHORIZATION_HEADER, "Bearer " + jwt);
+
+            return new ResponseEntity<>(new LoginResponseDto(jwt, user), httpHeaders, HttpStatus.OK);
+        }
+        catch (ResponseStatusException e) {
+            throw e;
+        }
+        catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to refresh token");
+        }
+    }
+
+    @PostMapping("/logout")
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+    public ResponseEntity<?> logout() {
+        try {
+            // Clear the security context
+            SecurityContextHolder.clearContext();
+            return ResponseEntity.ok().build();
+        }
+        catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Logout failed");
+        }
+    }
+
+    @GetMapping("/validate")
+    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
+    public ResponseEntity<?> validateToken() {
+        // If this endpoint is reached, the token is valid
+        return ResponseEntity.ok().build();
+    }
 }
 
