@@ -43,4 +43,9 @@ public class ShoppingCart
         return total;
     }
 
+    public void remove(String s) {
+    }
+
+    public void clear() {
+    }
 }
