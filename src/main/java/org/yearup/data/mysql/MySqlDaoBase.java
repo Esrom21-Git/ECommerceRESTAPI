@@ -1,5 +1,7 @@
 package org.yearup.data.mysql;
 
+import org.yearup.models.Profile;
+
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -130,4 +132,10 @@ public abstract class MySqlDaoBase
     {
         return dataSource;
     }
+
+    public abstract Profile getByUserId(int userId);
+
+    public abstract Profile update(int userId, Profile profile);
+
+    public abstract void delete(int userId);
 }

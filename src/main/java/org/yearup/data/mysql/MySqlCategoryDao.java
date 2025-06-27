@@ -3,6 +3,7 @@ package org.yearup.data.mysql;
 import org.springframework.stereotype.Component;
 import org.yearup.data.CategoryDao;
 import org.yearup.models.Category;
+import org.yearup.models.Profile;
 
 import javax.sql.DataSource;
 import java.sql.*;
@@ -15,6 +16,16 @@ public class MySqlCategoryDao extends MySqlDaoBase implements CategoryDao
     public MySqlCategoryDao(DataSource dataSource)
     {
         super(dataSource);
+    }
+
+    @Override
+    public Profile getByUserId(int userId) {
+        return null;
+    }
+
+    @Override
+    public Profile update(int userId, Profile profile) {
+        return null;
     }
 
     @Override
